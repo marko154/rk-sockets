@@ -52,8 +52,6 @@ class ChatUI:
         curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLACK)
         curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_WHITE)
 
-        self.init_user()
-
         # Loop where k is the last character pressed
         while k != ord("q"):
             # Initialization
@@ -61,22 +59,6 @@ class ChatUI:
             # Wait for next input
             k = stdscr.getch()
             self.handle_input(k)
-
-    def init_user(self) -> str:
-        name = ""
-        with self.lock:
-            key = 0
-            while True:
-                self.stdscr.clear()
-                self.stdscr.refresh()
-                self.draw_init(name)
-                key = self.stdscr.getch()
-                name += chr(key)
-                if key in (curses.KEY_ENTER, 10, 13):
-                    break
-                elif key in (127, curses.KEY_BACKSPACE):
-                    name = name[:-2]
-        self.client.init_user(name.strip())
 
     def draw_init(self, name):
         h, w = self.screen_dims()

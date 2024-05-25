@@ -4,6 +4,9 @@ import socket
 import datetime
 import enum
 import ssl
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.x509.oid import NameOID
 
 HEADER_LENGTH = 2
 
@@ -13,6 +16,7 @@ class PacketType(str, enum.Enum):
     message = "message"
     user_list_init = "user_list_init"
     user_left = "user_left"
+    user_joined = "user_joined"
     # TODO: more specific errors
     error = "error"
 
@@ -28,11 +32,12 @@ def receive_fixed_length_str(sock: socket.socket, msglen: int):
     return message
 
 
-def receive_packet(sock: socket.socket):
+def receive_packet(sock: ssl.SSLSocket):
     header = receive_fixed_length_str(
         sock, HEADER_LENGTH
     )  # preberi glavo sporocila (v prvih 2 bytih je dolzina sporocila)
-    packet_length = struct.unpack("!H", header)[0]  # pretvori dolzino sporocila v int
+    # pretvori dolzino sporocila v int
+    packet_length = struct.unpack("!H", header)[0]
 
     message = None
     if packet_length > 0:  # ce je vse OK
@@ -44,7 +49,7 @@ def receive_packet(sock: socket.socket):
     return obj
 
 
-def send_message(sock: socket.socket, message: dict[str, str | int | list]):
+def send_message(sock: ssl.SSLSocket, message: dict[str, str | int | list]):
     message["uts"] = str(int(datetime.datetime.now().timestamp()))
     encoded_message = json.dumps(message).encode(
         "utf-8"
@@ -58,27 +63,38 @@ def send_message(sock: socket.socket, message: dict[str, str | int | list]):
     )  # najprj posljemo dolzino sporocilo, slee nato sporocilo samo
     sock.sendall(full_message)
 
-def setup_SSL_context(certfile: str, keyfile: str, certauthsfile: str):
-  #uporabi samo TLS, ne SSL
-  context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-  # certifikat je obvezen
-  context.verify_mode = ssl.CERT_REQUIRED
-  #nalozi svoje certifikate
-  context.load_cert_chain(certfile=certfile, keyfile=keyfile)
-  # nalozi certifikate CAjev, ki jim zaupas
-  # (samopodp. cert. = svoja CA!)
-  context.load_verify_locations(certauthsfile)
-  # nastavi SSL CipherSuites (nacin kriptiranja)
-  context.set_ciphers('ECDHE-RSA-AES128-GCM-SHA256')
-  return context
 
-def get_username_from_conn(conn: ssl.SSLSocket):
+def setup_SSL_context(certfile: str, keyfile: str, certauthsfile: str):
+    # uporabi samo TLS, ne SSL
+    context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+    # certifikat je obvezen
+    context.verify_mode = ssl.CERT_REQUIRED
+    # nalozi svoje certifikate
+    context.load_cert_chain(certfile=certfile, keyfile=keyfile)
+    # nalozi certifikate CAjev, ki jim zaupas
+    # (samopodp. cert. = svoja CA!)
+    context.load_verify_locations(certauthsfile)
+    # nastavi SSL CipherSuites (nacin kriptiranja)
+    context.set_ciphers("ECDHE-RSA-AES128-GCM-SHA256")
+    return context
+
+
+def get_cert_common_name(conn: ssl.SSLSocket):
     cert = conn.getpeercert()
     if not cert:
-        return None
-    for sub in cert['subject']:
-      for key, value in sub:
-        # v commonName je ime uporabnika
-        if key == 'commonName':
-          return value
-    return None
+        raise Exception("Connection does not have a certificate")
+    for sub in cert["subject"]:
+        for key, value in sub:
+            # v commonName je ime uporabnika
+            if key == "commonName":
+                print("commonName", value)
+                return value
+    raise Exception("Certificate does not have a 'commonName'")
+
+
+def get_common_name(certfile: str):
+    with open(certfile, "rb") as f:
+        cert_data = f.read()
+    cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+    common_name = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+    return common_name

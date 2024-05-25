@@ -1,14 +1,20 @@
 import socket
 import threading
 from ui import ChatUI
-import random
 from collections import OrderedDict
 from dataclasses import dataclass
+import argparse
 
-from common import receive_packet, send_message, PacketType
+from common import (
+    get_common_name,
+    receive_packet,
+    send_message,
+    PacketType,
+    setup_SSL_context,
+)
 
 PORT = 1234
-HEADER_LENGTH = 2
+SERVER_CERTFILE = "server.pem"
 
 
 @dataclass
@@ -20,11 +26,14 @@ class Message:
 
 
 class Client:
-    def __init__(self):
-        # povezi se na streznik
+    def __init__(self, certfile: str, keyfile: str):
         print("[system] connecting to chat server ...")
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        ssl_ctx = setup_SSL_context(certfile, keyfile, SERVER_CERTFILE)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock = ssl_ctx.wrap_socket(sock)
         self.sock.connect(("localhost", PORT))
+
         print("[system] connected!")
 
         # zazeni message_receiver funkcijo v loceni niti
@@ -34,7 +43,7 @@ class Client:
 
         self.ui = ChatUI(self)
         self.rooms = OrderedDict[str, list[Message]]({"public": []})
-        self.username = ""
+        self.username = get_common_name(certfile)
 
     def start(self):
         self.ui.start()
@@ -50,6 +59,9 @@ class Client:
             if type_ == PacketType.user_list_init:
                 users = packet["users"]
                 self.init_rooms(users)
+            elif type_ == PacketType.user_joined:
+                user = packet["user"]
+                self.init_rooms([user])
             elif type_ == PacketType.user_left:
                 user = packet["user"]
                 self.handle_user_disconnect(user)
@@ -62,11 +74,6 @@ class Client:
             elif type_ == PacketType.error:
                 # TODO: error screen
                 print("There was an error")
-
-    def init_user(self, name: str):
-        self.username = name
-        send_message(self.sock, {"type": PacketType.init, "sender": name})
-        print(f"[system] assigned username {name}")
 
     def init_rooms(self, users: list[str]):
         for room in users:
@@ -96,5 +103,15 @@ class Client:
 
 
 if __name__ == "__main__":
-    client = Client()
+    parser = argparse.ArgumentParser(description="RK chat client application")
+    parser.add_argument(
+        "--certfile", type=str, required=True, help="Path to the certificate file"
+    )
+    parser.add_argument(
+        "--keyfile", type=str, required=True, help="Path to the private key file"
+    )
+    args = parser.parse_args()
+    certfile = args.certfile
+    keyfile = args.keyfile
+    client = Client(certfile, keyfile)
     client.start()
