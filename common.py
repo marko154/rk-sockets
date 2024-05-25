@@ -44,7 +44,7 @@ def receive_packet(sock: socket.socket):
     return obj
 
 
-def send_message(sock: socket.socket, message: dict[str, str | int]):
+def send_message(sock: socket.socket, message: dict[str, str | int | list]):
     message["uts"] = str(int(datetime.datetime.now().timestamp()))
     encoded_message = json.dumps(message).encode(
         "utf-8"
@@ -58,7 +58,7 @@ def send_message(sock: socket.socket, message: dict[str, str | int]):
     )  # najprj posljemo dolzino sporocilo, slee nato sporocilo samo
     sock.sendall(full_message)
 
-def setup_SSL_context(certfile: str, keyfile: str):
+def setup_SSL_context(certfile: str, keyfile: str, certauthsfile: str):
   #uporabi samo TLS, ne SSL
   context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
   # certifikat je obvezen
@@ -67,7 +67,7 @@ def setup_SSL_context(certfile: str, keyfile: str):
   context.load_cert_chain(certfile=certfile, keyfile=keyfile)
   # nalozi certifikate CAjev, ki jim zaupas
   # (samopodp. cert. = svoja CA!)
-  context.load_verify_locations('clients.pem')
+  context.load_verify_locations(certauthsfile)
   # nastavi SSL CipherSuites (nacin kriptiranja)
   context.set_ciphers('ECDHE-RSA-AES128-GCM-SHA256')
   return context

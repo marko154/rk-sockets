@@ -43,6 +43,9 @@ class Client:
     def packet_receiver(self):
         while True:
             packet = receive_packet(self.sock)
+            if not packet:
+                continue
+
             type_ = packet["type"]
             if type_ == PacketType.user_list_init:
                 users = packet["users"]

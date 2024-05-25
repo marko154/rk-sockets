@@ -41,9 +41,9 @@ def client_thread(client_sock, client_addr):
 
         while True:  # neskoncna zanka
             packet = receive_packet(client_sock)
-            type_ = packet["type"]
             if not packet:  # ce obstaja sporocilo
-                break
+                continue
+            type_ = packet["type"]
 
             print(
                 "[packet] [" + client_addr[0] + ":" + str(client_addr[1]) + "] : ",
@@ -72,11 +72,11 @@ def client_thread(client_sock, client_addr):
 
     # prisli smo iz neskoncne zanke
     with clients_lock:
-        if username in clients:
+        if username and username in clients:
             del clients[username]
-        for name, client in clients.items():
-            send_message(client, {"type": PacketType.user_left, "user": username})
-        print("[system] we now have " + str(len(clients)) + " clients")
+            for name, client in clients.items():
+                send_message(client, {"type": PacketType.user_left, "user": username})
+            print("[system] we now have " + str(len(clients)) + " clients")
     client_sock.close()
 
 
